@@ -25,15 +25,6 @@ scouts-own [
 ]
 
 globals [
-  ;task variables: these tasks are processes that bees need to go through
-  watch-dance-task          ; bees are on the swarm, being neutral, resting, and watching other bees dance 
-  discover-task             ; a few initial scouts fly out to discover hive sites  
-  discovery-inspect-task    ; when a hive site is discovered, the initial bee will inspect the site inside out and evaluate its quality
-  go-home-task              ; after initial inspection or subsequent inspections, the bees fly back home  
-  dance-task                ; the bees dance to advertise the sites they inspected in order to recruit more supporters to further inspect the site and spread the words
-  re-inspect-task           ; newly committed bees will go to explore the sites advertised by their recruiters 
-  pipe-task                 ; when quorum is reached, scouts fly back to the swarm and start to pipe in order to excite every bee and prepare them to take off 
-  take-off-task             ; when all the scouts are piping, they take off and fly to the new hive  
   color-list                ; colors for the hives, which keep hive colors, plot pens colors, and committed bees' colors consistent
   quality-list              ; quality of hives
   quorum
@@ -48,7 +39,6 @@ globals [
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup
   clear-all
-  setup-tasks
   setup-hives
   setup-bees
   set quorum 33    ; 33 is a sweet spot of accuracy-efficiency tread-off in this model, yielded from trial-and-error. 
@@ -56,18 +46,6 @@ to setup
   set show-dance-path? true
   set scouts-visible? true
   reset-ticks
-end
-
-to setup-tasks
-  set watch-dance-task task watch-dance
-  set discover-task task discover
-  set discovery-inspect-task task discovery-inspect
-  set go-home-task task go-home
-  set dance-task task dance
-  set take-off-task task take-off
-  set re-inspect-task task re-inspect
-  set pipe-task task pipe
-  set take-off-task task take-off
 end
 
 to setup-hives
@@ -101,7 +79,7 @@ to setup-bees
     set no-discovery? false 
     set on-site? false 
     set piping? false 
-    set next-task watch-dance-task
+    set next-task "watch-dance"
     ]
   ask n-of (initial-percentage) scouts[set initial-scout? true set beetimer random 100]
 end
@@ -123,22 +101,22 @@ to watch-dance
   if count scouts with [piping?] in-radius 3 > 0 [
     set target [target] of one-of scouts with [piping?] 
     set color [color] of target 
-    set next-task pipe-task 
+    set next-task "pipe"
     set beetimer 20 
     set piping? true
   ]
   move-around
   if no-discovery? [set initial-scout? false]
-  if initial-scout? and beetimer < 0 [set next-task discover-task set beetimer initial-explore-time set initial-scout? false]
+  if initial-scout? and beetimer < 0 [set next-task "discover" set beetimer initial-explore-time set initial-scout? false]
   if not initial-scout? [
     if beetimer < 0 [
       if count other scouts in-cone 3 60 > 0 [
         let observed one-of scouts in-cone 3 60
-        if [next-task] of observed = dance-task [
+        if [next-task] of observed = "dance" [
           if random ((1 / [interest] of observed) * 1000) < 1 [
             set target [target] of observed 
             set color white 
-            set next-task re-inspect-task
+            set next-task "re-inspect"
           ]
         ]
       ]
@@ -152,7 +130,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to discover
   ifelse beetimer < 0 [
-    set next-task go-home-task set no-discovery? true
+    set next-task "go-home" set no-discovery? true
   ][
   ifelse count sites in-radius 3 > 0 [
     let temp-target one-of sites in-radius 3 
@@ -161,7 +139,7 @@ to discover
       ask target [set discovered? true set color item who color-list] 
       set interest [quality] of target 
       set color [color] of target 
-      set next-task discovery-inspect-task 
+      set next-task "discovery-inspect"
       set beetimer 100
     ][
     rt (random 60 - random 60) proceed set beetimer beetimer - 1
@@ -176,11 +154,11 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to discovery-inspect
   ifelse beetimer < 0 [
-    set next-task go-home-task set on-site? false set trips trips + 1
+    set next-task "go-home" set on-site? false set trips trips + 1
   ][
     if distance target > 2 [face target fd 1] 
     set on-site? true 
-    if count scouts with [on-site? and target = [target] of myself] in-radius 3 > quorum [set next-task go-home-task set on-site? false set piping? true] 
+    if count scouts with [on-site? and target = [target] of myself] in-radius 3 > quorum [set next-task "go-home" set on-site? false set piping? true] 
     ifelse random 3 = 0 [hide-turtle][show-turtle] 
     set dist-to-hive distancexy 0 0 
     set beetimer beetimer - 1
@@ -193,12 +171,12 @@ end
 to go-home
   ifelse distance my-home < 1 [
     ifelse no-discovery? [
-      set next-task watch-dance-task set no-discovery? false
+      set next-task "watch-dance" set no-discovery? false
     ][
       ifelse piping? [
-        set next-task pipe-task set beetimer 20
+        set next-task "pipe" set beetimer 20
       ][
-      set next-task dance-task set beetimer 0
+      set next-task "dance" set beetimer 0
       ]
     ]
   ][
@@ -213,16 +191,16 @@ end
 
 to dance
   ifelse count scouts with [piping?] in-radius 3 > 0 [
-    pu set next-task pipe-task set beetimer 20 set target [target] of one-of scouts with [piping?] set color [color] of target set piping? true 
+    pu set next-task "pipe" set beetimer 20 set target [target] of one-of scouts with [piping?] set color [color] of target set piping? true 
   ][
     if beetimer > interest - (trips - 1) * (15 + random 5) and interest > 0 [
-      set next-task re-inspect-task 
+      set next-task "re-inspect"
       pen-up 
       set interest interest - (15 + random 5) 
       set beetimer 25
     ]
     if beetimer > interest - (trips - 1) * (15 + random 5) and interest <= 0 [
-      set next-task watch-dance-task 
+      set next-task "watch-dance"
       set target nobody 
       set interest 0 
       set trips 0 
@@ -231,7 +209,7 @@ to dance
     ]
     if beetimer <=  interest - (trips - 1) * (15 + random 5)[
       ifelse interest <= 50 and random 100 < 43 [
-        set next-task re-inspect-task 
+        set next-task "re-inspect"
         set interest interest - (15 + random 5) 
         set beetimer 10
       ][
@@ -289,7 +267,7 @@ to re-inspect
     pu
     ifelse distance target < 1 [
       if interest = 0 [set interest [quality] of target set color [color] of target] 
-      set next-task discovery-inspect-task 
+      set next-task "discovery-inspect"
       set beetimer 50
     ][
       proceed
@@ -304,7 +282,7 @@ end
 to pipe
   move-around
   if count scouts with [piping?] in-radius 5 = count scouts in-radius 5 [set beetimer beetimer - 1] 
-  if beetimer < 0 [set next-task take-off-task] 
+  if beetimer < 0 [set next-task "take-off"] 
 end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -359,7 +337,6 @@ to show-hide-scouts
   ]
   set scouts-visible? not scouts-visible?
 end
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 210
@@ -503,8 +480,8 @@ true
 true
 "" ""
 PENS
-"watching bees" 1.0 0 -1398087 true "" "plot count scouts with [next-task = watch-dance-task]"
-"dancing bees" 1.0 0 -7025278 true "" "plot count scouts with [next-task = dance-task]"
+"watching bees" 1.0 0 -1398087 true "" "plot count scouts with [next-task = \"watch-dance\"]"
+"dancing bees" 1.0 0 -7025278 true "" "plot count scouts with [next-task = \"dance\"]"
 
 PLOT
 942
